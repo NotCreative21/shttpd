@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use glob::glob;
 
 
-/*  Main n struct to store page data, the page data is stored as a vector of bytes inside
+/*  Main struct to store page data, the page data is stored as a vector of bytes inside
     another vector, the page list is simply a vector of strings to make checking the 
     request easier
 */
@@ -19,7 +19,7 @@ pub struct Pages {
     This is done so that request that are asking for an invalid file are ignored and a 404
     page can be returned properly
 */
-pub fn parse_buffer(buf:[u8; 1024]) -> String {
+pub fn parse_buffer(buf:[u8; 1024], dir:&Option<String>) -> String {
 
     // create vec of characters to store a copy of the buffer
     let mut reqchar:Vec<char> = Vec::new(); 
@@ -34,7 +34,8 @@ pub fn parse_buffer(buf:[u8; 1024]) -> String {
 
     }
 
-    let buffer:String = reqchar.iter()
+    let buffer:String = reqchar
+        .iter()
         .collect::<String>();
 
     // find where the GET request ask for a page 
@@ -48,7 +49,8 @@ pub fn parse_buffer(buf:[u8; 1024]) -> String {
             pagereq_char.push(reqchar[i]);
         }
         
-        let response:String = pagereq_char.iter()
+        let response:String = pagereq_char
+            .iter()
             .collect::<String>()
             .trim()
             .to_string();
@@ -58,7 +60,15 @@ pub fn parse_buffer(buf:[u8; 1024]) -> String {
 
     // TODO - check config to see if a different file or no file should be returned
     // if no page is met, return the 404 page
-    "404.html".to_string()
+    format!(
+        "{}/{}", 
+        dir
+            .as_ref()
+            .unwrap()
+            .to_string(), 
+        "404.html"
+            .to_string())
+
 }
 
 
@@ -67,7 +77,7 @@ pub fn parse_buffer(buf:[u8; 1024]) -> String {
     the list of file data and file name, then responds correctly. It uses matching indexes
     to choose the corresponding file and file index.
 */
-pub async fn process_connection(mut stream:TcpStream, file_data:Vec<Vec<u8>>, file_list:Vec<String>) {  
+pub async fn process_connection(mut stream:TcpStream, file_data:Vec<Vec<u8>>, file_list:Vec<String>, dir:Option<String>, dpage:Option<String>) {  
     tokio::spawn(async move {
             
             // create main buffer to store the request in 
@@ -77,27 +87,52 @@ pub async fn process_connection(mut stream:TcpStream, file_data:Vec<Vec<u8>>, fi
             stream.read(&mut buffer).await.expect("failed to read buffer");
 
             let check:String = format!(
-                "{}{}", 
-                "web/".to_string(), 
-                &parse_buffer(buffer)
+                "{}/{}", 
+                dir.as_ref().expect("invalid html directory"), 
+                &parse_buffer(buffer, &dir)
             );
 
             // iterate through the list of files and check if it exist
-            let mut file_index:Option<usize> = file_list.iter()
+            let mut file_index:Option<usize> = file_list
+                .iter()
                 .position(|x| x.eq(&check));
 
             //TODO - check options for 404 page response
             // if the file does not exist, send the 404 page
             if file_index == None {  
-                file_index = file_list.iter()
-                    .position(|x| x.eq(&"web/404.html"
-                    .to_string()));    
+                if dpage.as_ref().unwrap().is_empty() {
+                    file_index = file_list
+                        .iter()
+                        .position(|x| x.eq(
+                            &format!(
+                                "{}/404.html", 
+                                dir.as_ref()
+                                .unwrap())
+                            .to_string()
+                        )
+                    );    
+                }
+                
+                else {
+                    file_index = file_list
+                        .iter()
+                        .position(|x| x.eq(
+                            &format!(
+                                "{}/{}",
+                                dir.as_ref()
+                                    .unwrap(),
+                                dpage.as_ref()
+                                    .unwrap()
+                        )
+                    ))
+                }
             } 
 
             let mut response:Vec<u8> = Vec::new();  
 
             // Starting content for the HTTP response 
-            response.append(&mut "HTTP/1.1 200 OK\r\nContent-Length: ".as_bytes()
+            response.append(&mut "HTTP/1.1 200 OK\r\nContent-Length: "
+                .as_bytes()
                 .to_owned());
 
             let size:String = format!("{}\r\nserver: shttpd/0.2\r\n\r\n", 
@@ -127,13 +162,22 @@ pub async fn process_connection(mut stream:TcpStream, file_data:Vec<Vec<u8>>, fi
     Initial loading of cache, this creates the struct that page data and page names are
     stored in and calls a function to load the data from the file system
 */
-pub fn load_cache() -> Pages { 
+pub fn load_cache(dir:&Option<String>) -> Pages { 
     let page_sum = Pages {
         page_data: Vec::new(), 
         page_list: Vec::new(),
     };
 
-    load_directories("./web", page_sum)
+    if dir.as_ref() == None 
+        || dir.as_ref()
+        .expect("failed to read html directory, please check config file")
+        .len() < 1 {
+        return load_directories("./web", page_sum);        
+    } 
+    else {
+        load_directories(&dir.as_ref()
+            .expect("invalid html directory"), page_sum)
+    }
 }
 
 
@@ -156,7 +200,8 @@ pub fn load_directories(dir:&str, mut page_sum:Pages) -> Pages {
             .expect("failed to dereference file")
             .is_dir() { 
 
-            println!("Loading: {}", e.as_ref()
+            println!("loading: {}", e
+                .as_ref()
                 .ok()
                 .unwrap()
                 .as_path()
@@ -172,8 +217,8 @@ pub fn load_directories(dir:&str, mut page_sum:Pages) -> Pages {
             );
 
             // add the name as a string
-            page_sum.page_list.push(String::from(e
-                .ok()
+            page_sum.page_list.push(format!("./{}",
+                e.ok()
                 .expect("failed to push page to cache")
                 .as_path()
                 .to_string_lossy())
