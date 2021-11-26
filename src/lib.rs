@@ -88,13 +88,13 @@ pub async fn process_connection(
         let file_index_fs: Option<usize> = full_list.iter().position(|x| x.eq(&check));
         let mut fs_call: bool = false;
 
-        if file_index == None {
+        if file_index == None && file_index_fs != None {
             fs_call = true;
         }
 
         //TODO - check options for 404 page response
         // if the file does not exist, send the 404 page
-        if file_index == None && file_index_fs == None {
+        if file_index_fs == None {
             if dpage.as_ref().unwrap().is_empty() {
                 file_index = file_list
                     .iter()
