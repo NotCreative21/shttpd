@@ -16,7 +16,7 @@ async fn main() {
     // use env args to specify different configs or options
     let envargs: Vec<String> = env::args().collect();
 
-    let mut config: ConfigOptions = parse_config("./shttpd.conf".to_string());
+    let mut active_config: &str = "./shttpd.conf";
 
     // Set defaults if no args are taken in
     if envargs.len() > 1 {
@@ -27,11 +27,24 @@ async fn main() {
                 std::process::exit(0);
             }
             "config" => {
-                config = parse_config(envargs[2].to_string());
+                active_config = &envargs[2];
             }
-            _ => println!("invalid env arg"),
+            "help" => {
+                println!("shttpd: a fast and light http server
+    Usage: 
+        shttpd [options]
+    Options: 
+            [help]
+            [gen_config]
+            [config]
+    For more help consult https://github.com/NotCreative21/shttpd");
+                std::process::exit(0);
+            }
+            _ => println!("invalid arg! please use 'shttpd help' if you need help!"),
         };
     }
+
+    let config: ConfigOptions = parse_config(active_config.to_string());
 
     // Bind the listener to the address
     let listener = TcpListener::bind(get_net(&config)).await.unwrap();
@@ -43,8 +56,8 @@ async fn main() {
         &config.dir.ignored_files,
         config.dir.max_cache_size,
     );
-    println!(
-        "{} Files loaded into cache in {:#?}\nstarting webserver on {}:{}",
+    print!(
+        "\r{} Files loaded into cache in {:#?}\nstarting webserver on {}:{}",
         file_data.page_list.len(),
         startup.elapsed(),
         config.ip,

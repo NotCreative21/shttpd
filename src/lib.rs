@@ -35,6 +35,7 @@ pub fn parse_buffer(buf: [u8; 1024], dir: &Option<String>) -> String {
         let mut pagereq_char: Vec<char> = Vec::new();
 
         // iterate through the buffer and push the characters within the request
+        // ignore the first 5 characters since that is just the request type
         for i in 5..target {
             pagereq_char.push(reqchar[i]);
         }
@@ -67,7 +68,6 @@ pub async fn process_connection(
     dpage: Option<String>,
 ) {
     tokio::spawn(async move {
-
         // create main buffer to store the request in
         let mut buffer = [0; 1024];
 
@@ -75,11 +75,11 @@ pub async fn process_connection(
         stream
             .read(&mut buffer)
             .await
-            .expect("failed to read buffer");
+            .expect("*warn: failed to read request buffer");
 
         let check: String = format!(
             "{}/{}",
-            dir.as_ref().expect("invalid html directory"),
+            dir.as_ref().expect("*error: invalid html directory"),
             &parse_buffer(buffer, &dir)
         );
 
@@ -94,7 +94,7 @@ pub async fn process_connection(
 
         //TODO - check options for 404 page response
         // if the file does not exist, send the 404 page
-        if file_index_fs == None {
+        if file_index_fs == None && file_index == None {
             if dpage.as_ref().unwrap().is_empty() {
                 file_index = file_list
                     .iter()
@@ -140,7 +140,7 @@ pub async fn process_connection(
 
         // Write/respond to the request
         if let Err(e) = stream.write_all(response_bytes).await {
-            eprintln!("failed to write to socket; err = {:?}", e);
+            eprintln!("*warn: failed to write to socket; err = {:?}", e);
 
             return;
         }
@@ -166,14 +166,15 @@ pub fn load_cache(
     if dir.as_ref() == None
         || dir
             .as_ref()
-            .expect("failed to read html directory, please check config file")
+            .expect("*error: failed to read html directory, please check config file")
             .len()
             < 1
     {
+        // set default directory
         return load_directories("./web", page_sum, ignored_exten, ignored_f, mcs);
     } else {
         load_directories(
-            &dir.as_ref().expect("invalid html directory"),
+            &dir.as_ref().expect("*error: invalid html directory"),
             page_sum,
             ignored_exten,
             ignored_f,
@@ -196,12 +197,12 @@ pub fn load_directories(
     let dir_rec: String = format!("{}/**/*", dir);
 
     // iterate through all directories and sub directories using glob
-    for e in glob(&dir_rec).expect("failed to read file system") {
+    for e in glob(&dir_rec).expect("*error: failed to read file system") {
         // if the file is a directory ignore adding it to the page data
         if !e
             .as_ref()
             .ok()
-            .expect("failed to dereference file")
+            .expect("*error: failed to dereference file")
             .is_dir()
         {
             // add name to the full list
@@ -209,13 +210,13 @@ pub fn load_directories(
                 "./{}",
                 e.as_ref()
                     .ok()
-                    .expect("failed to push page to cache")
+                    .expect("*warn: failed to push page to cache")
                     .as_path()
                     .to_string_lossy()
             ));
 
             if ignored_exten.as_ref() != None {
-                let file_type = &e.as_ref().ok().expect("failed to parse files").extension();
+                let file_type = &e.as_ref().ok().expect("*warn: failed to parse files").extension();
                 let mut skip = false;
                 for i in ignored_exten.as_ref().unwrap() {
                     if i.to_owned() == file_type.unwrap().to_string_lossy().into_owned() {
@@ -255,19 +256,35 @@ pub fn load_directories(
 
             // add the data as bytes
             page_sum.page_data.push(
-                fs::read(&e.as_ref().ok().expect("failed to read file system"))
+                fs::read(&e.as_ref().ok().expect("*warn: failed to read file system"))
                     .ok()
-                    .expect("failed to read bytes"),
+                    .expect("*warn: failed to read bytes"),
             );
 
             // add the name as a string
             page_sum.page_list.push(format!(
                 "./{}",
-                e.ok()
-                    .expect("failed to push page to cache")
+                e.as_ref()
+                    .ok()
+                    .expect("*warn: failed to push page to cache")
                     .as_path()
                     .to_string_lossy()
             ));
+
+            // if the file is able to be loaded into the cache, we can remove it from this vec
+            // this will slightly improve lookup times for page request
+            page_sum.full_list.remove(
+                page_sum
+                    .full_list
+                    .iter()
+                    .position(|x| {
+                        x.eq(&format!(
+                            "./{}",
+                            &e.as_ref().ok().unwrap().as_path().to_string_lossy()
+                        ))
+                    })
+                    .unwrap(),
+            );
         }
     }
 

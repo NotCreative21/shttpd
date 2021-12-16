@@ -8,8 +8,6 @@ Any suggestions for improvements or features would be appreciated.
 
 The goal of this project for me is to learn more about Rust and systems level programming while also building a functional webserver. The webserver is intended to be small and fast and not be used for a 'general purpose' website.
 
-It only supports text files as of now.
-
 ### current features:
 * file caching in memory for fast response
 * optimized response to GET request to increase performance
@@ -18,7 +16,6 @@ It only supports text files as of now.
 ### planned features
 * reloading file cache of fs update
 * logging options
-* default home page
 * more file caching options
 * assume file extension when visiting urls
 * possible dash board

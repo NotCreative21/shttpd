@@ -75,12 +75,15 @@ fn append_dir(html_dir: String, dir: String) -> String {
 */
 pub fn parse_config(conf: String) -> ConfigOptions {
     let mut config: ConfigOptions =
-        toml::from_str(&fs::read_to_string(conf).expect("failed to access config"))
-            .expect("config error, please check your config");
+        toml::from_str(&fs::read_to_string(conf).expect("*error: failed to access config"))
+            .expect("*error: config error, please check your config");
 
     //assert_eq!(config.dir.html_dir, None);
 
     if config.dir.html_dir.as_ref().unwrap().is_empty() {
+
+        // warn if there is no directory specified, but continue
+        println!("*warn: no default html directory specified, using ./web");
         config.dir.html_dir = Some("./web".to_string());
     }
 
@@ -105,23 +108,23 @@ pub fn parse_config(conf: String) -> ConfigOptions {
                 .to_string(),
         ))
     {
-        eprintln!("default page does not exist: check default_page in config");
+        eprintln!("*error: default page does not exist: check default_page in config");
         std::process::exit(1);
     }
 
-    if config.options.page404.expect("failed to read config")
+    if config.options.page404.expect("*error: failed to read config")
         && !check_dir(append_dir(
             config
                 .dir
                 .html_dir
                 .as_ref()
-                .expect("invalid html directory")
+                .expect("*error: invalid html directory")
                 .to_string(),
             "./404.html".to_string(),
         ))
     {
         eprintln!(
-            "404 page file does not exist: check page404 in config or create one in the html_dir"
+            "*error: 404 page file does not exist: check page404 in config or create one in the html_dir"
         );
         std::process::exit(1);
     }
@@ -129,7 +132,11 @@ pub fn parse_config(conf: String) -> ConfigOptions {
 }
 
 fn check_dir(dir: String) -> bool {
-    if PathBuf::from(dir).exists() {
+    let current_path = PathBuf::from(&dir);
+    if !current_path.is_absolute() {
+        println!("*warn: non absolute path used at: {}", dir);
+    }
+    if current_path.exists() {
         return true;
     }
     false
@@ -140,10 +147,10 @@ fn check_dir(dir: String) -> bool {
     into somewhere the program can read it from
 */
 pub fn default_config() {
-    fs::copy("./shttpd.conf", "shttpd.conf.old").expect("failed to backup old config");
+    fs::copy("./shttpd.conf", "shttpd.conf.old").expect("*error: failed to backup old config");
 
-    fs::remove_file("./shttpd.conf").expect("failed to delete current config file");
+    fs::remove_file("./shttpd.conf").expect("*error: failed to delete current config file");
 
     fs::copy("./template/conf_template.conf", "new.conf")
-        .expect("failed to copy default config, please ensure there is one downloaded");
+        .expect("*error: failed to copy default config, please ensure there is one downloaded");
 }
